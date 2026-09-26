@@ -52,59 +52,48 @@ import {
 } from "@/components/ui/questionnaire"
 import { Spinner } from "@/components/ui/spinner"
 import {
-  mintGameChatAccessToken,
-  startGameChatSession,
-} from "@/lib/games/chat-actions"
-import type { GameModelId } from "@/lib/games/model-catalog"
+  mintSimulationChatAccessToken,
+  startSimulationChatSession,
+} from "@/lib/physics-lab/chat-actions"
+import type { SimulationModelId } from "@/lib/physics-lab/model-catalog"
 import { describeError } from "@/lib/observability"
 import { cn } from "@/lib/utils"
 // Type-only: the agent module reaches the server bundle, never the browser.
-import type { gameChat } from "@/trigger/chat"
+import type { simulationChat } from "@/trigger/chat"
 
 const ASK_USER = "ask_user"
 
 export function ChatThread({
-  gameId,
-  credits,
+  simulationId,
   initialMessages,
   initialModelId,
   initialSession,
   onTurnComplete,
 }: {
-  gameId: string
-  credits: bigint
+  simulationId: string
   initialMessages: UIMessage[]
-  initialModelId: GameModelId
+  initialModelId: SimulationModelId
   initialSession?: ChatSessionPersistedState
   onTurnComplete: () => void
 }) {
   const [prompt, setPrompt] = useState("")
-  // The thread owns the choice from here on, because the thread is what sends
-  // the turns. It starts on whatever the home page picked, and a switch made
-  // here lives as long as the tab — nothing on the game records what it was
-  // built with, so a reload starts over from the URL.
-  const [modelId, setModelId] = useState<GameModelId>(initialModelId)
+  const [modelId, setModelId] =
+    useState<SimulationModelId>(initialModelId)
 
-  // Memoized because the transport re-reads this whenever its identity changes,
-  // and a fresh object literal every render would be a change every render.
   const clientData = useMemo(() => ({ modelId }), [modelId])
 
-  // There is no endpoint to point at — the transport talks to the chat agent
-  // directly, and both callbacks are server actions so the browser never holds
-  // an environment secret key. The chat id doubles as the game id the thread is
-  // persisted under.
-  const transport = useTriggerChatTransport<typeof gameChat>({
-    task: "game-chat",
-    accessToken: ({ chatId }) => mintGameChatAccessToken(chatId),
+  const transport = useTriggerChatTransport<typeof simulationChat>({
+    task: "simulation-chat",
+    accessToken: ({ chatId }) => mintSimulationChatAccessToken(chatId),
     startSession: ({ chatId, clientData }) =>
-      startGameChatSession({ chatId, clientData }),
+      startSimulationChatSession({ chatId, clientData }),
     // Merged into every turn's metadata, and handed to `startSession` for the
     // first one, so the agent reads the current pick rather than the one the
     // thread opened on. The agent validates it against the same catalog.
     clientData,
     // What the last turn persisted: the session token and the stream cursor, so
     // a fresh tab reconnects without a round-trip to create a session.
-    sessions: initialSession ? { [gameId]: initialSession } : undefined,
+    sessions: initialSession ? { [simulationId]: initialSession } : undefined,
   })
 
   // The message a resumed stream might be continuing, read once. Only a thread
@@ -151,7 +140,7 @@ export function ChatThread({
     status,
     error,
   } = useChat({
-    id: gameId,
+    id: simulationId,
     messages: initialMessages,
     transport: chatTransport,
     // answering `ask_user` resolves the tool call the paused turn is sitting
@@ -181,19 +170,17 @@ export function ChatThread({
     // gets that far.
     onError: (error) => {
       Sentry.logger.error(
-        Sentry.logger.fmt`Chat turn failed for game ${gameId}`,
+        Sentry.logger.fmt`Chat turn failed for simulation ${simulationId}`,
         {
-          "game.id": gameId,
+          "simulation.id": simulationId,
           "chat.messages": messageCount.current,
           "chat.resumed": Boolean(initialSession),
           ...describeError(error),
         }
       )
 
-      // The log says a turn failed; this says why, with a stack trace and the
-      // replay of the session it happened in attached.
       Sentry.captureException(error, {
-        tags: { "game.id": gameId },
+        tags: { "simulation.id": simulationId },
       })
     },
   })
@@ -202,34 +189,23 @@ export function ChatThread({
   // before a turn is attempted rather than after one is refused. It cannot
   // notice a balance emptied by the turn now streaming — `onTurnComplete`
   // refreshes the page, and the agent refuses the next turn regardless.
-  const outOfCredits = credits <= 0n
-
-  // Synced in an effect rather than assigned during render, which is a ref
-  // write React's rules — rightly — refuse.
   useEffect(() => {
     messageCount.current = messages.length
   }, [messages])
 
-  // A game is created with its opening prompt already stored as the thread's
-  // first message, so a new thread arrives with a user turn and no reply. Ask
-  // for that reply once per game: `sendMessage()` with no argument submits the
-  // messages already in the thread instead of appending another one.
-  const submittedGameId = useRef<string | null>(null)
+  const submittedSimulationId = useRef<string | null>(null)
 
   useEffect(() => {
-    if (submittedGameId.current === gameId) {
+    if (submittedSimulationId.current === simulationId) {
       return
     }
 
-    submittedGameId.current = gameId
+    submittedSimulationId.current = simulationId
 
-    // A new game arrives with its opening prompt already stored, so without
-    // this guard an org with no credits would open every game it created
-    // straight into a refused turn.
-    if (!outOfCredits && initialMessages.at(-1)?.role === "user") {
+    if (initialMessages.at(-1)?.role === "user") {
       sendMessage()
     }
-  }, [gameId, initialMessages, sendMessage, outOfCredits])
+  }, [simulationId, initialMessages, sendMessage])
 
   function handleSubmit(value: string) {
     sendMessage({ text: value })
@@ -242,9 +218,9 @@ export function ChatThread({
   // alone never reaches the backend on a resumed stream, which is every stream
   // this thread rejoins after a refresh.
   const handleStop = useCallback(() => {
-    void transport.stopGeneration(gameId)
+    void transport.stopGeneration(simulationId)
     stopStream()
-  }, [transport, gameId, stopStream])
+  }, [transport, simulationId, stopStream])
 
   // A question the agent is still waiting on. The turn paused on a tool call
   // with no result, so the thread can only move once that call is answered:
@@ -353,27 +329,7 @@ export function ChatThread({
         </MessageScroller>
       </MessageScrollerProvider>
       <div className="mx-auto flex w-full max-w-3xl shrink-0 flex-col gap-3 px-4 pb-4">
-        {/* Two ways to arrive here, and the balance is checked first because it
-            is the one that knows *why*: a turn refused before it started for
-            want of credits comes back as an ordinary error, and a Server Action
-            does not promise to deliver its message intact. Anything else that
-            went wrong says so in its own words. */}
-        {outOfCredits ? (
-          <Alert>
-            <CircleAlertIcon />
-            <AlertTitle>Out of credits</AlertTitle>
-            <AlertDescription>
-              <p>
-                Building a simulation spends credits, and this organization has
-                none left.{" "}
-                <Link href="/billing" className="underline underline-offset-4">
-                  Add more from the billing page
-                </Link>{" "}
-                to pick this simulation back up.
-              </p>
-            </AlertDescription>
-          </Alert>
-        ) : error ? (
+        {error ? (
           <Alert>
             <CircleAlertIcon />
             <AlertTitle>That turn didn&apos;t finish</AlertTitle>
@@ -388,13 +344,11 @@ export function ChatThread({
           modelId={modelId}
           onModelChange={setModelId}
           streaming={status === "submitted" || status === "streaming"}
-          disabled={status !== "ready" || pendingQuestion || outOfCredits}
+          disabled={status !== "ready" || pendingQuestion}
           placeholder={
-            outOfCredits
-              ? "Out of credits"
-              : pendingQuestion
-                ? "Answer the question above…"
-                : "Ask for a change…"
+            pendingQuestion
+              ? "Answer the question above…"
+              : "Ask for a change…"
           }
         />
       </div>

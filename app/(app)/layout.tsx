@@ -1,20 +1,19 @@
-import { auth } from "@clerk/nextjs/server"
+import React from "react"
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { getCreditBalance } from "@/lib/billing/ledger"
-import { listGames } from "@/lib/games/queries"
+import { listSimulations } from "@/lib/physics-lab/queries"
 
-export default async function AppLayout({ children }: LayoutProps<"/">) {
-  const { orgId } = await auth()
-  const [games, credits] = await Promise.all([
-    listGames(),
-    getCreditBalance(orgId),
-  ])
+export default async function AppLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const simulations = await listSimulations()
 
   return (
     <SidebarProvider>
-      <AppSidebar games={games} credits={credits} />
+      <AppSidebar simulations={simulations} />
       <SidebarInset>{children}</SidebarInset>
     </SidebarProvider>
   )

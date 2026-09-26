@@ -1,7 +1,7 @@
 import type { LanguageModelUsage } from "ai"
 
 import { DOLLAR } from "@/lib/billing/format"
-import type { GameModelId } from "@/lib/games/model-catalog"
+import type { SimulationModelId } from "@/lib/physics-lab/model-catalog"
 
 /**
  * A rate quoted the way Anthropic publishes it — dollars per million tokens —
@@ -59,7 +59,7 @@ export const MODEL_RATES = {
     cacheWrite: perMillionTokens(1.25),
     output: perMillionTokens(5),
   },
-} satisfies Record<GameModelId, ModelRates>
+} satisfies Record<SimulationModelId, ModelRates>
 
 function costOf(tokens: number | undefined, rate: bigint): bigint {
   if (!tokens || tokens < 0) {
@@ -88,7 +88,7 @@ export function priceStep({
   modelId,
   usage,
 }: {
-  modelId: GameModelId
+  modelId: SimulationModelId
   usage: LanguageModelUsage
 }): bigint {
   const rates = MODEL_RATES[modelId]

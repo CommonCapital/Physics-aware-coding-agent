@@ -5,8 +5,8 @@ import { daytona } from "@/lib/daytona/client"
 // Imported straight from `./client` rather than `@/lib/db`, like the chat
 // store: this module runs inside the Trigger.dev worker, where the
 // `server-only` marker on the `@/lib/db` entry would throw.
-import { db, games } from "@/lib/db/client"
-import { readRuntimeFiles } from "@/lib/games/seed"
+import { db, simulations } from "@/lib/db/client"
+import { readRuntimeFiles } from "@/lib/physics-lab/seed"
 import { describeError, elapsed, logger } from "@/lib/observability"
 
 // Where the game's source lives inside the sandbox. `/home/daytona` is the
@@ -26,13 +26,13 @@ export const GAME_DIR = "/home/daytona/game"
  * a sandbox that exists and is seeded, and a crash in between leaks an unused
  * sandbox rather than pointing the game at a half-built one.
  */
-export async function createGameSandbox(
-  gameId: string
+export async function createSimulationSandbox(
+  simulationId: string
 ): Promise<{ sandbox: Sandbox }> {
   const startedAt = performance.now()
   const { folders, files } = await readRuntimeFiles(GAME_DIR)
 
-  const sandbox = await daytona.create({ labels: { gameId } })
+  const sandbox = await daytona.create({ labels: { simulationId } })
 
   await sandbox.fs.createFolder(GAME_DIR, "755")
 
@@ -45,15 +45,12 @@ export async function createGameSandbox(
   await sandbox.fs.uploadFiles(files)
 
   await db
-    .update(games)
+    .update(simulations)
     .set({ sandboxId: sandbox.id })
-    .where(eq(games.id, gameId))
+    .where(eq(simulations.id, simulationId))
 
-  // The one place a sandbox comes into existence, and the slowest step in a
-  // game's first turn — a create that has crept from seconds to a minute is
-  // visible here and nowhere else, which is why the duration is on it.
-  logger.info(logger.fmt`Created sandbox for game ${gameId}`, {
-    "game.id": gameId,
+  logger.info(logger.fmt`Created sandbox for simulation ${simulationId}`, {
+    "simulation.id": simulationId,
     "sandbox.id": sandbox.id,
     "sandbox.seed_files": files.length,
     "sandbox.seed_folders": folders.length,
@@ -63,29 +60,20 @@ export async function createGameSandbox(
   return { sandbox }
 }
 
+// Backward-compatible alias
+export const createGameSandbox = createSimulationSandbox
+
 /**
- * Deletes every Daytona sandbox belonging to a game, and reports how many went.
- *
- * Sandboxes are found by the `gameId` label `createGameSandbox` puts on them
- * rather than by the id on the row, because the row is not a complete record of
- * them: the id is written last, so a crash in between leaves a sandbox that is
- * running and labelled and that nothing points at. A delete has to take those
- * with it — a sandbox nobody can reach still bills. `sandboxId` is passed in
- * as well for the opposite case, a row naming a sandbox the label search
- * misses, and is skipped when the search already found it.
- *
- * Every sandbox is attempted before anything throws, so one that refuses to go
- * cannot strand the rest. That it throws at all is what lets the caller keep
- * the game row on failure: the row is the only handle a retry has.
+ * Deletes every Daytona sandbox belonging to a simulation, and reports how many went.
  */
-export async function deleteGameSandboxes(
-  gameId: string,
+export async function deleteSimulationSandboxes(
+  simulationId: string,
   sandboxId?: string | null
 ): Promise<number> {
   const startedAt = performance.now()
   const sandboxes = new Map<string, Sandbox>()
 
-  for await (const sandbox of daytona.list({ labels: { gameId } })) {
+  for await (const sandbox of daytona.list({ labels: { simulationId } })) {
     sandboxes.set(sandbox.id, sandbox)
   }
 
@@ -93,12 +81,13 @@ export async function deleteGameSandboxes(
     try {
       sandboxes.set(sandboxId, await daytona.get(sandboxId))
     } catch (error) {
-      // Almost always a sandbox that is already gone, which is nothing to
-      // delete and no reason to fail — but it is also the only signal that a
-      // row and Daytona disagree, so it is a warning rather than a swallow.
       logger.warn(
-        logger.fmt`Could not fetch sandbox ${sandboxId} of game ${gameId} to delete it`,
-        { "game.id": gameId, "sandbox.id": sandboxId, ...describeError(error) }
+        logger.fmt`Could not fetch sandbox ${sandboxId} of simulation ${simulationId} to delete it`,
+        {
+          "simulation.id": simulationId,
+          "sandbox.id": sandboxId,
+          ...describeError(error),
+        }
       )
     }
   }
@@ -119,13 +108,10 @@ export async function deleteGameSandboxes(
     } catch (error) {
       failed.push(sandbox.id)
 
-      // Per sandbox rather than only in the throw below, because the throw
-      // reaches the player as "try again" and this is the half an operator
-      // needs: which sandbox, in what state, and what Daytona said about it.
       logger.error(
-        logger.fmt`Could not delete sandbox ${sandbox.id} of game ${gameId}`,
+        logger.fmt`Could not delete sandbox ${sandbox.id} of simulation ${simulationId}`,
         {
-          "game.id": gameId,
+          "simulation.id": simulationId,
           "sandbox.id": sandbox.id,
           "sandbox.state": String(sandbox.state),
           ...describeError(error),
@@ -136,22 +122,25 @@ export async function deleteGameSandboxes(
 
   if (failed.length > 0) {
     throw new Error(
-      `Could not delete ${failed.length} of ${sandboxes.size} sandboxes for game ${gameId}`
+      `Could not delete ${failed.length} of ${sandboxes.size} sandboxes for simulation ${simulationId}`
     )
   }
 
-  // The counterpart to the create log, and the only place a delete is visible:
-  // more than one sandbox here means the leak described above happened and was
-  // cleaned up, which is worth being able to count.
-  logger.info(logger.fmt`Deleted ${deleted} sandboxes for game ${gameId}`, {
-    "game.id": gameId,
-    "sandbox.deleted": deleted,
-    "sandbox.found": sandboxes.size,
-    duration_ms: elapsed(startedAt),
-  })
+  logger.info(
+    logger.fmt`Deleted ${deleted} sandboxes for simulation ${simulationId}`,
+    {
+      "simulation.id": simulationId,
+      "sandbox.deleted": deleted,
+      "sandbox.found": sandboxes.size,
+      duration_ms: elapsed(startedAt),
+    }
+  )
 
   return deleted
 }
+
+// Backward-compatible alias
+export const deleteGameSandboxes = deleteSimulationSandboxes
 
 /**
  * The game's sandbox, created if it has none and started if it was stopped.
@@ -165,58 +154,56 @@ export async function deleteGameSandboxes(
  * and a first turn whose creation crashed. Sandboxes also stop themselves once
  * idle, which is the common case for a thread resumed after a while.
  */
-export async function getGameSandbox(
-  gameId: string
+export async function getSimulationSandbox(
+  simulationId: string
 ): Promise<{ sandbox: Sandbox }> {
-  const [game] = await db
-    .select({ sandboxId: games.sandboxId })
-    .from(games)
-    .where(eq(games.id, gameId))
+  const [row] = await db
+    .select({ sandboxId: simulations.sandboxId })
+    .from(simulations)
+    .where(eq(simulations.id, simulationId))
     .limit(1)
 
-  if (!game) {
-    // A tool call naming a game that isn't there means the session outlived
-    // its row, which no ordinary path produces — worth a line of its own
-    // before the throw, since the throw only says which id was missing.
-    logger.error(logger.fmt`No game ${gameId} to get a sandbox for`, {
-      "game.id": gameId,
-    })
-
-    throw new Error(`No game ${gameId} to get a sandbox for`)
-  }
-
-  if (!game.sandboxId) {
-    // The fallback path described above. It is meant to be rare, so it is a
-    // warning rather than an info: a run of these means `onChatStart` is
-    // failing and every first turn is paying the create cost mid-stream.
-    logger.warn(
-      logger.fmt`Game ${gameId} had no sandbox at tool time, creating one`,
-      { "game.id": gameId }
+  if (!row) {
+    logger.error(
+      logger.fmt`No simulation ${simulationId} to get a sandbox for`,
+      { "simulation.id": simulationId }
     )
 
-    return createGameSandbox(gameId)
+    throw new Error(`No simulation ${simulationId} to get a sandbox for`)
   }
 
-  const sandbox = await daytona.get(game.sandboxId)
+  if (!row.sandboxId) {
+    logger.warn(
+      logger.fmt`Simulation ${simulationId} had no sandbox at tool time, creating one`,
+      { "simulation.id": simulationId }
+    )
+
+    return createSimulationSandbox(simulationId)
+  }
+
+  const sandbox = await daytona.get(row.sandboxId)
 
   if (sandbox.state !== "started") {
     const startedAt = performance.now()
 
     await sandbox.start()
 
-    // The resumed-thread case. Ordinary, but it is seconds the player waits
-    // through before the agent's first tool call lands, so it is worth being
-    // able to see how often it happens and what it costs.
-    logger.info(logger.fmt`Restarted idle sandbox for game ${gameId}`, {
-      "game.id": gameId,
-      "sandbox.id": game.sandboxId,
-      "sandbox.previous_state": String(sandbox.state),
-      duration_ms: elapsed(startedAt),
-    })
+    logger.info(
+      logger.fmt`Restarted idle sandbox for simulation ${simulationId}`,
+      {
+        "simulation.id": simulationId,
+        "sandbox.id": row.sandboxId,
+        "sandbox.previous_state": String(sandbox.state),
+        duration_ms: elapsed(startedAt),
+      }
+    )
   }
 
   return { sandbox }
 }
+
+// Backward-compatible alias
+export const getGameSandbox = getSimulationSandbox
 
 // The port the game's static server listens on inside the sandbox. Nothing
 // else in the sandbox uses it; it just has to be a value the server and the

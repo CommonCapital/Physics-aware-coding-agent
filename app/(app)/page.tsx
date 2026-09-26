@@ -1,7 +1,6 @@
-import { auth } from "@clerk/nextjs/server"
 import Image from "next/image"
 
-import { NewGameComposer } from "@/components/new-game-composer"
+import { NewSimulationComposer } from "@/components/new-simulation-composer"
 import {
   Empty,
   EmptyContent,
@@ -12,8 +11,6 @@ import {
 } from "@/components/ui/empty"
 
 export default async function Page() {
-  await auth.protect({ unauthenticatedUrl: "/sign-in" })
-
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-6">
       <Empty className="flex-none">
@@ -25,13 +22,14 @@ export default async function Page() {
             What should we simulate today?
           </EmptyTitle>
           <EmptyDescription>
-            Describe a physical scenario in your own words — the geometry, the
-            loads, the units — and get a running simulation with its assumptions
-            and limits stated alongside the numbers.
+            Describe a physical scenario in your own words — phenomenon,
+            geometry, values, units — and get a running simulation grounded in
+            real physics, with its governing equations, assumptions, and limits
+            stated alongside every number.
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent className="max-w-2xl gap-6">
-          <NewGameComposer />
+          <NewSimulationComposer />
         </EmptyContent>
       </Empty>
     </div>

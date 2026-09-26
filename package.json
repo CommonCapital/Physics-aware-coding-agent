@@ -1,8 +1,8 @@
 {
   "name": "physics-simulation-lab",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "type": "module",
-  "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -20,9 +20,6 @@
     "@ai-sdk/anthropic": "^4.0.45",
     "@ai-sdk/react": "^4.0.87",
     "@base-ui/react": "^1.7.0",
-    "@clerk/backend": "3.17.0",
-    "@clerk/nextjs": "^7.8.2",
-    "@clerk/ui": "^1.30.8",
     "@daytona/sdk": "^0.207.0",
     "@neon/config": "^1.0.5",
     "@neon/env": "^1.1.5",

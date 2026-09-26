@@ -11,7 +11,7 @@ type Preview =
   | { status: "error"; message: string }
 
 /** The first failure the frame saw, as `runtime/report.js` reports it. */
-type GameError = {
+type SimulationError = {
   message: string
   source: string
   line: number | null
@@ -35,7 +35,7 @@ const count = (value: unknown) => (typeof value === "number" ? value : null)
  * player's extensions can also post into this window, so the shape is checked
  * rather than trusted, and each field is taken only if it is the type it claims.
  */
-function readError(data: unknown): GameError | null {
+function readError(data: unknown): SimulationError | null {
   if (typeof data !== "object" || data === null) return null
 
   const status = data as { type?: unknown; error?: unknown }
@@ -81,10 +81,10 @@ function withoutQuery(value: string) {
  * fresh state instead of showing the previous game while the new url loads.
  */
 export function ChatPreview({
-  gameId,
+  simulationId,
   revision,
 }: {
-  gameId: string
+  simulationId: string
   revision: number
 }) {
   const [preview, setPreview] = useState<Preview>({ status: "loading" })
@@ -95,7 +95,7 @@ export function ChatPreview({
 
     async function load() {
       try {
-        const response = await fetch(`/api/games/${gameId}/preview`, {
+        const response = await fetch(`/api/simulations/${simulationId}/preview`, {
           signal: controller.signal,
         })
         const body = await response.json()
@@ -119,14 +119,11 @@ export function ChatPreview({
         // The route logs the two it answers deliberately (404, 409); what
         // reaches here on top of those is a 500 or the fetch itself failing.
         Sentry.logger.error(
-          Sentry.logger.fmt`Preview unavailable for game ${gameId}: ${message}`,
+          Sentry.logger.fmt`Preview unavailable for simulation ${simulationId}: ${message}`,
           {
-            "game.id": gameId,
-            "game.revision": revision,
+            "simulation.id": simulationId,
+            "simulation.revision": revision,
             "exception.message": message,
-            // A failure on revision 0 is a preview that never loaded; a later
-            // one is a turn's build failing to reach a player who was watching
-            // the previous build a moment ago.
             "preview.first_load": revision === 0,
           }
         )
@@ -144,7 +141,7 @@ export function ChatPreview({
     void load()
 
     return () => controller.abort()
-  }, [gameId, revision])
+  }, [simulationId, revision])
 
   const ready = preview.status === "ready" ? preview : null
 
@@ -185,8 +182,8 @@ export function ChatPreview({
       // a syntax error carries a position and no stack, a rejected load a stack
       // and no position, and a failed script tag neither.
       const attributes: Record<string, string | number | boolean> = {
-        "game.id": gameId,
-        "game.revision": ready.revision,
+        "simulation.id": simulationId,
+        "simulation.revision": ready.revision,
         "exception.message": error.message,
       }
 
@@ -200,7 +197,7 @@ export function ChatPreview({
       if (error.column !== null) attributes["code.column.number"] = error.column
 
       Sentry.logger.error(
-        Sentry.logger.fmt`Game preview crashed: ${error.message}`,
+        Sentry.logger.fmt`Simulation preview crashed: ${error.message}`,
         attributes
       )
     }
@@ -213,7 +210,7 @@ export function ChatPreview({
       window.removeEventListener("message", onMessage)
       clearInterval(timer)
     }
-  }, [ready, gameId])
+  }, [ready, simulationId])
 
   if (preview.status === "loading") {
     return (

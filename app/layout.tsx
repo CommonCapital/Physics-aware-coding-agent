@@ -1,11 +1,9 @@
-import { ClerkProvider } from "@clerk/nextjs"
-import { shadcn } from "@clerk/ui/themes"
 import { Fraunces, Geist, Geist_Mono } from "next/font/google"
+import type { Metadata } from "next"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
-import { Metadata } from "next"
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
 
@@ -21,11 +19,11 @@ const fontLogo = Fraunces({
 
 export const metadata: Metadata = {
   title: {
-    default: "Sandbox — Build physics simulations with AI",
-    template: "%s · Sandbox",
+    default: "Physics Simulation Lab — Build simulations with AI",
+    template: "%s · Physics Simulation Lab",
   },
   description:
-    "Describe a physical scenario and watch it run. Sandbox is an agentic simulation builder that settles the inputs with you, writes the code, and shows the result with its assumptions, limitations and verification status alongside it.",
+    "Describe a physical scenario and watch it run. Physics Simulation Lab is an agentic simulation builder that settles the inputs with you, writes the code, and shows the result with its assumptions, limitations and verification status alongside it.",
 }
 
 export default function RootLayout({
@@ -46,9 +44,7 @@ export default function RootLayout({
       )}
     >
       <body>
-        <ClerkProvider appearance={{ theme: shadcn }}>
-          <ThemeProvider>{children}</ThemeProvider>
-        </ClerkProvider>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   )
