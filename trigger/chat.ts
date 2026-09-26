@@ -3,7 +3,7 @@ import { stepCountIs, streamText } from "ai"
 import { z } from "zod"
 
 import type { SimulationModelId } from "@/lib/physics-lab/model-catalog"
-import { simulationModelSettings } from "@/lib/physics-lab/agent"
+import { simulationModelSettings, simulationModelId } from "@/lib/physics-lab/agent"
 import {
   loadSimulationMessages,
   saveSimulationMessages,
@@ -105,8 +105,9 @@ export const simulationChat = chat.agent({
 
     logger.info(logger.fmt`Chat turn complete for simulation ${chatId}`, {
       "simulation.id": chatId,
-      "gen_ai.request.model":
-        clientData?.modelId ?? DEFAULT_SIMULATION_MODEL_ID,
+      "gen_ai.request.model": simulationModelId(
+        (clientData?.modelId ?? DEFAULT_SIMULATION_MODEL_ID) as SimulationModelId
+      ),
       "chat.messages": uiMessages.length,
       "chat.has_cursor": lastEventId !== undefined,
       duration_ms: elapsed(startedAt),

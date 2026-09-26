@@ -84,7 +84,7 @@ export default defineConfig({
       // have to be copied into the deployment by hand. They land at the same
       // path relative to the deployment root that they have here, which is what
       // that module resolves them from.
-      additionalFiles({ files: ["lib/games/runtime/**/*"] }),
+      additionalFiles({ files: ["lib/physics-lab/runtime/**/*"] }),
       // Uploads source maps for the deployed bundle and injects the matching
       // release into it, so the stack traces Sentry shows for a failed run
       // point at this source rather than at minified worker output. Deploy-only

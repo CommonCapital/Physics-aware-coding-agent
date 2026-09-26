@@ -1,6 +1,5 @@
 "use server"
 
-import { anthropic } from "@ai-sdk/anthropic"
 import * as Sentry from "@sentry/nextjs"
 import { generateText } from "ai"
 import { eq } from "drizzle-orm"
@@ -9,6 +8,7 @@ import { redirect } from "next/navigation"
 
 import { deleteSimulationSandboxes } from "@/lib/daytona/utils"
 import { db, simulations } from "@/lib/db"
+import { ACTIVE_PROVIDER, getModel, getModelId } from "@/lib/llm"
 import { authorizeSimulation } from "@/lib/physics-lab/authorize"
 import { endSimulationChatSession } from "@/lib/physics-lab/chat-session"
 import { generateMessageId } from "@/lib/physics-lab/messages"
@@ -20,17 +20,16 @@ import {
 import { truncateTitle } from "@/lib/physics-lab/title"
 import { describeError, elapsed } from "@/lib/observability"
 
-const TITLE_MODEL = "claude-haiku-4-5"
-
 /**
  * Names a simulation after the prompt it was created from.
  */
 async function generateTitle(prompt: string) {
   const startedAt = performance.now()
+  const titleModelId = getModelId("fast", ACTIVE_PROVIDER)
 
   try {
     const { text } = await generateText({
-      model: anthropic(TITLE_MODEL),
+      model: getModel("fast", ACTIVE_PROVIDER),
       instructions:
         "You name physics simulations from the prompt that created them. " +
         "Reply with a title of at most four words in title case. No quotes, " +
@@ -44,7 +43,7 @@ async function generateTitle(prompt: string) {
     if (!title) {
       Sentry.logger.warn("Title model returned nothing usable", {
         "gen_ai.operation.name": "generate_content",
-        "gen_ai.request.model": TITLE_MODEL,
+        "gen_ai.request.model": titleModelId,
         duration_ms: elapsed(startedAt),
       })
     }
@@ -55,7 +54,7 @@ async function generateTitle(prompt: string) {
       "Title generation failed, falling back to the prompt",
       {
         "gen_ai.operation.name": "generate_content",
-        "gen_ai.request.model": TITLE_MODEL,
+        "gen_ai.request.model": titleModelId,
         ...describeError(error),
         duration_ms: elapsed(startedAt),
       }

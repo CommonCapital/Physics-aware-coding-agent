@@ -1,7 +1,6 @@
 import type { LanguageModelUsage } from "ai"
 
 import { DOLLAR } from "@/lib/billing/format"
-import type { SimulationModelId } from "@/lib/physics-lab/model-catalog"
 
 /**
  * A rate quoted the way Anthropic publishes it — dollars per million tokens —
@@ -40,7 +39,16 @@ type ModelRates = {
  * forgotten here is a type error rather than an undefined rate that prices a
  * turn at zero.
  */
-export const MODEL_RATES = {
+/** Default rate for unknown/new models — priced at a mid-tier Claude rate. */
+const FALLBACK_RATES: ModelRates = {
+  input: perMillionTokens(3),
+  cacheRead: perMillionTokens(0.3),
+  cacheWrite: perMillionTokens(3.75),
+  output: perMillionTokens(15),
+}
+
+export const MODEL_RATES: Record<string, ModelRates> = {
+  // Claude (Anthropic)
   "claude-opus-5": {
     input: perMillionTokens(5),
     cacheRead: perMillionTokens(0.5),
@@ -59,7 +67,39 @@ export const MODEL_RATES = {
     cacheWrite: perMillionTokens(1.25),
     output: perMillionTokens(5),
   },
-} satisfies Record<SimulationModelId, ModelRates>
+  // OpenAI
+  "o3": {
+    input: perMillionTokens(10),
+    cacheRead: perMillionTokens(2.5),
+    cacheWrite: perMillionTokens(10),
+    output: perMillionTokens(40),
+  },
+  "gpt-4.1": {
+    input: perMillionTokens(2),
+    cacheRead: perMillionTokens(0.5),
+    cacheWrite: perMillionTokens(2),
+    output: perMillionTokens(8),
+  },
+  "gpt-4.1-mini": {
+    input: perMillionTokens(0.4),
+    cacheRead: perMillionTokens(0.1),
+    cacheWrite: perMillionTokens(0.4),
+    output: perMillionTokens(1.6),
+  },
+  // DeepSeek
+  "deepseek-reasoner": {
+    input: perMillionTokens(0.55),
+    cacheRead: perMillionTokens(0.14),
+    cacheWrite: perMillionTokens(0.55),
+    output: perMillionTokens(2.19),
+  },
+  "deepseek-chat": {
+    input: perMillionTokens(0.27),
+    cacheRead: perMillionTokens(0.07),
+    cacheWrite: perMillionTokens(0.27),
+    output: perMillionTokens(1.1),
+  },
+}
 
 function costOf(tokens: number | undefined, rate: bigint): bigint {
   if (!tokens || tokens < 0) {
@@ -88,10 +128,10 @@ export function priceStep({
   modelId,
   usage,
 }: {
-  modelId: SimulationModelId
+  modelId: string
   usage: LanguageModelUsage
 }): bigint {
-  const rates = MODEL_RATES[modelId]
+  const rates = MODEL_RATES[modelId] ?? FALLBACK_RATES
   const { noCacheTokens, cacheReadTokens, cacheWriteTokens } =
     usage.inputTokenDetails
 

@@ -1,108 +1,73 @@
-# Physics Simulation Lab
+# PhysicsReview
 
-An open-source, AI-powered physics simulation environment. Describe a physical scenario in plain language — the phenomenon, geometry, values, and units — and the AI agent writes a live browser simulation grounded in real, validated physics. Every simulation displays its governing equations, assumptions, limitations, and verification status alongside the results.
+**Physics-aware testing and code review for simulation developers.**
 
-Built for engineers verifying hypotheses before committing to real designs, and for students building physical intuition.
+Catch the bugs that don't crash but give wrong answers: unit mix-ups, unstable time steps, sign errors, formulas applied outside their valid range.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
 
-![Architecture diagram](public/architecture.svg)
+## The problem
+
+Developers building simulation software — robotics, engineering/CAE, game engines, scientific computing — face a class of bugs that ordinary tests miss entirely. The code compiles, runs, and produces results. But those results are quietly wrong.
+
+Examples that slip through standard CI:
+
+- `KE = m * v ** 2` — missing the `½` factor, off by 2×
+- Passing angle in degrees to `sin()` where radians are expected — plausible-looking output, wrong by a factor up to ~57×
+- Applying Bernoulli to viscous pipe flow where Hagen-Poiseuille applies
+- Using a time step larger than `T_n / 10` for a spring-mass RK4 integrator — numerical instability that looks like damping
+- Temperature in Celsius when the ideal gas law expects Kelvin — pressure off by a factor of `T_celsius / 273`
+
+These bugs require physics domain expertise to catch. That expertise is scarce, reviews are slow, and the errors compound.
 
 ---
 
-## What it does
+## What PhysicsReview does
 
-You type a description of a physical scenario. The agent:
+Upload source code (or paste a git diff) and get back:
 
-1. **Classifies** the request — educational simulation, preliminary engineering analysis, conceptual visualization, or unsupported
-2. **Asks** for any missing inputs — one question at a time, never inventing values
-3. **Calls** a validated solver from the physics catalog
-4. **Writes** a browser simulation with the result, governing equations, assumptions, and limitations displayed beside the conversation
+### 1. Codebase-to-law mapping
+Identifies which functions implement which physical laws — Newton's second law, Bernoulli, ideal gas, Coulomb's law, etc. — across Python, C++, JavaScript/TypeScript, Rust, MATLAB, Fortran, Julia, and more.
 
-The simulation runs live in the browser. Every turn the agent edits a file, the preview reloads. There is no sign-in, no credit system, and no billing.
+### 2. Physics-aware test generation
+Generates tests that experts write by hand but rarely have time to:
+- **Analytical benchmarks** — known closed-form results to compare against (e.g. free-fall displacement after 2 s = 19.613 m)
+- **Conservation checks** — energy/momentum/mass must be conserved over a simulation run
+- **Unit consistency** — same physics expressed in different input units must give the same result
+- **Validity-range guards** — detect out-of-range usage before it produces garbage results
+- **Sign-convention tests** — expose sign errors that produce plausible but wrong outputs
+
+### 3. PR-level review
+Reviews the changed code (or the full codebase) and flags physics violations in plain language with suggested fixes:
+- Equation errors (wrong formula, missing constant, wrong factor)
+- Unit mismatches (degrees vs radians, Celsius vs Kelvin, gauge vs absolute pressure)
+- Sign errors (attractive force with wrong sign, downward acceleration with wrong sign)
+- Validity violations (Bernoulli applied to turbulent flow, SUVAT with variable acceleration)
+- Numerical stability issues (time step too large for the system's natural frequency)
 
 ---
 
-## Physics catalog
+## Physics knowledge base
 
-The agent is **hard-constrained** to this catalog. It cannot write its own physics, improvise equations, or produce numbers outside these models. 31 solvers across 6 domains.
+14 physical laws across 6 domains, each with:
+- Governing equations
+- SI units for every quantity
+- Validity conditions and applicability assumptions
+- Known implementation bugs developers make
+- Test templates for each law
 
-### Classical mechanics
-
-| Solver | Model |
+| Domain | Laws |
 |---|---|
-| `solveKinematics1D` | Constant-acceleration SUVAT — any 3 of 5 quantities |
-| `solveNewtonSecondLaw` | F = ma — any 2 of 3 quantities + weight |
-| `solveDragForce` | Stokes drag (bv) and quadratic drag (½ρC_D Av²) + RK4 trajectory |
-| `solveFriction` | Coulomb friction — flat and inclined surfaces |
-| `solveImpulseMomentum` | Impulse-momentum theorem + elastic / inelastic / perfectly-inelastic collisions |
-| `solveWorkEnergy` | Work, KE, ΔKE, gravitational PE, spring PE, power |
-| `solveAngularKinematics` | Rotational SUVAT with constant α — tangential and centripetal |
-| `solveTorque` | τ = Iα, angular momentum, rotational KE, rolling-without-slip |
-| `solveMomentOfInertia` | 8 catalog shapes + parallel-axis theorem |
-| `solveProjectileMotion` | 2D projectile motion (no drag) |
-| `solveFreeFall` | Vertical free fall with optional linear Stokes drag |
-| `solveCircularMotion` | Uniform circular motion + optional banked-turn analysis |
-| `solveSimplePendulum` | Exact nonlinear equation of motion (RK4) |
-| `solvePhysicalPendulum` | Rigid body on fixed pivot (RK4) |
-| `solveSpringMass` | 1-DOF free and forced vibration (RK4) |
-| `solveSimplySupportedBeam` | Euler-Bernoulli SSB — central point load or UDL |
+| Classical mechanics | SUVAT, Newton's 2nd law, Projectile motion, Work-energy theorem, Circular motion, Spring-mass oscillator |
+| Fluid mechanics | Bernoulli's equation, Reynolds number |
+| Thermodynamics | Ideal gas law |
+| Circuits | Ohm's law, RC circuit transient |
+| Electromagnetism | Coulomb's law |
+| Modern physics | Special relativity, Radioactive decay |
 
-### Fluid mechanics
-
-| Solver | Model |
-|---|---|
-| `solveFluidStatics` | Hydrostatic pressure profile + Archimedes buoyancy |
-| `solveContinuity` | Conservation of mass — A₁v₁ = A₂v₂ |
-| `solveBernoulli` | Bernoulli equation — inviscid incompressible steady flow |
-| `solveHagenPoiseuille` | Viscous laminar pipe flow (Re < 2300) |
-| `solveReynoldsNumber` | Re classification — pipe, flat plate, sphere |
-| `solveStokesSettling` | Terminal settling velocity of a sphere (Re ≪ 1) |
-| `solveDragCoefficient` | Form drag F_D = ½ρC_D Av² |
-| `solveVenturiMeter` | Venturi flow meter — ideal or real (discharge coeff) |
-
-### Thermodynamics
-
-| Solver | Model |
-|---|---|
-| `solveIdealGasProcess` | Ideal gas — isothermal, isobaric, isochoric, adiabatic |
-| `solveThermalExpansion` | Linear thermal expansion ΔL = α L₀ ΔT |
-
-### Circuits
-
-| Solver | Model |
-|---|---|
-| `solveOhmLaw` | Ohm's law V = IR, resistor networks (series / parallel) |
-| `solveRCCircuit` | Series RC transient — charge / discharge |
-| `solveRLCircuit` | Series RL transient — current growth / decay |
-| `solveRLCCircuit` | Free RLC series oscillation — Q factor, regime |
-
-### Electromagnetism
-
-| Solver | Model |
-|---|---|
-| `solveCoulombsLaw` | Coulomb force, electric field, potential, PE |
-| `solveElectricField` | Point-charge field or uniform parallel-plate field |
-| `solveCapacitor` | Parallel-plate geometry / network / direct: C, Q, V, energy |
-| `solveLorentzForce` | F = qvB (particle) and F = ILB (wire) + cyclotron r/f |
-| `solveBiotSavart` | B on-axis of circular loop; B inside solenoid |
-| `solveFaradayLaw` | Flux change, motional EMF (BLv), inductor back-EMF |
-| `getMaxwellEquations` | All four Maxwell equations — integral and differential form |
-
-### Modern physics
-
-| Solver | Model |
-|---|---|
-| `solveSpecialRelativity` | γ, β, relativistic p and E, time dilation, length contraction |
-| `solvePhotoelectricEffect` | Einstein model — KE_max = hf − Φ, stopping potential |
-| `solveDeBroglie` | de Broglie wavelength λ = h/p |
-| `solveBohrAtom` | Bohr hydrogen atom — energy levels, radii, spectral lines |
-| `solveRadioactiveDecay` | Exponential decay N(t) = N₀ e^(−λt) |
-| `solveComptonScattering` | Compton wavelength shift Δλ = (h/m_e c)(1−cosθ) |
-
-All solvers live in [`lib/physics-lab/runtime/simulation/`](lib/physics-lab/runtime/simulation/) as plain browser ES modules — no build step, no bundler, runs directly in the Daytona sandbox.
+The knowledge base is in [`lib/physics-lab/knowledge-base/laws.ts`](lib/physics-lab/knowledge-base/laws.ts) — plain TypeScript, easy to extend.
 
 ---
 
@@ -110,41 +75,57 @@ All solvers live in [`lib/physics-lab/runtime/simulation/`](lib/physics-lab/runt
 
 ```
 Browser
-├── / — NewSimulationComposer
-└── /simulations/[id] — SimulationChat (resizable split: thread | preview iframe)
+├── / — ReviewComposer (upload files / paste diff)
+└── /review/[id] — ReviewResults (findings · tests · mappings)
          │
-         │  HTTP (Server Actions, Trigger.dev transport)
+         │  HTTP (Server Actions)
          ▼
 Next.js App Router (app/)
-├── page.tsx                     — home
-├── simulations/[id]/page.tsx    — simulation view
-├── api/simulations/[id]/preview — signed Daytona preview URL
-└── Server Actions               — create · rename · delete · startSession · mintToken
+├── page.tsx                     — home (review upload)
+├── review/[id]/page.tsx         — results page
+└── Server Actions               — createReviewJob · deleteReviewJob
          │
          │  Trigger.dev SDK
          ▼
-Trigger.dev  chat.agent  "simulation-chat"
-├── onChatStart    — createSimulationSandbox (Daytona)
-├── onTurnStart    — persist messages (PostgreSQL)
-├── run            — streamText → Claude (Opus 5 / Sonnet 5 / Haiku 4.5)
-├── onTurnComplete — save cursor + access token
-└── tools          — read_file · write_file · replace_text · list_files · delete_file · ask_user
+Trigger.dev  schemaTask  "physics-review"
+├── Pass 1: Law mapping   — codebase → law IDs (balanced model)
+├── Pass 2: Test generation — law mappings → test code (balanced model)
+└── Pass 3: Review         — physics violations + findings (thorough model)
          │
-         │  Daytona SDK
+         │  Database (PostgreSQL via Neon)
          ▼
-Daytona Linux Sandbox  /home/daytona/simulation/
-├── index.html, report.js, style.css  (seeded, read-only)
-├── model.js, view.js, scenario.json  (agent-written, per simulation)
-├── simulation/                       (read-only validated solvers)
-│   ├── models/   — 9 solver files (classical-mechanics, electromagnetism, …)
-│   ├── ui/       — report panel, plots, numeric inputs
-│   ├── index.js  — barrel export (31 solvers + utilities)
-│   ├── integration.js, quality.js, units.js, validation.js
-└── engine/                           (three.js rendering toolkit, read-only)
-         ▲
-         │  signed preview URL → iframe
-Browser Preview
+review_jobs table
+├── source files (JSONB)
+├── law mappings (JSONB)
+├── findings (JSONB)
+├── generated tests (JSONB)
+└── summary (text)
 ```
+
+The simulation builder (Physics Simulation Lab) is preserved alongside the review product. Existing simulations are accessible via the sidebar.
+
+---
+
+## Multi-provider LLM support
+
+The review agent is not tied to a single LLM. Set `LLM_PROVIDER` in your environment to switch providers:
+
+```bash
+LLM_PROVIDER=claude    # Anthropic Claude (default)
+LLM_PROVIDER=openai    # OpenAI
+LLM_PROVIDER=deepseek  # DeepSeek
+```
+
+Each provider exposes three tiers used by the review pipeline:
+- **thorough** — most capable model (used for the review pass)
+- **balanced** — quality/speed tradeoff (used for law mapping and test generation)
+- **fast** — lowest latency (used for title generation)
+
+| Provider | Thorough | Balanced | Fast |
+|---|---|---|---|
+| Claude | claude-opus-5 | claude-sonnet-5 | claude-haiku-4-5 |
+| OpenAI | o3 | gpt-4.1 | gpt-4.1-mini |
+| DeepSeek | deepseek-reasoner | deepseek-chat | deepseek-chat |
 
 ---
 
@@ -154,10 +135,8 @@ Browser Preview
 |---|---|
 | Framework | Next.js 16 (App Router) |
 | Database | PostgreSQL via [Neon](https://neon.tech) + Drizzle ORM |
-| AI runtime | [Trigger.dev](https://trigger.dev) `chat.agent` + Vercel AI SDK `streamText` |
-| LLM | Anthropic Claude (Opus 5 / Sonnet 5 / Haiku 4.5) |
-| Sandbox | [Daytona](https://daytona.io) (Linux sandboxes, static file server on :2222) |
-| 3D rendering | [three.js](https://threejs.org) (via import map, no bundler) |
+| AI runtime | [Trigger.dev](https://trigger.dev) `schemaTask` + Vercel AI SDK `generateText` |
+| LLM | Claude / OpenAI / DeepSeek (configurable via `LLM_PROVIDER`) |
 | Observability | Sentry |
 | UI | shadcn/ui + Tailwind CSS |
 
@@ -169,25 +148,32 @@ Browser Preview
 
 - Node.js 20+
 - A [Neon](https://neon.tech) PostgreSQL database
-- An [Anthropic](https://console.anthropic.com) API key
+- An API key for at least one LLM provider:
+  - Anthropic: `ANTHROPIC_API_KEY`
+  - OpenAI: `OPENAI_API_KEY`
+  - DeepSeek: `DEEPSEEK_API_KEY`
 - A [Trigger.dev](https://trigger.dev) project
-- A [Daytona](https://daytona.io) API key
 
 ### Environment variables
 
 Copy `.env.example` to `.env.local` and fill in:
 
 ```bash
-# Database (Neon)
+# Database
 DATABASE_URL=postgresql://...
 
-# AI
+# LLM provider (choose one: claude | openai | deepseek)
+LLM_PROVIDER=claude
+
+# API keys — set the one matching LLM_PROVIDER
 ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+DEEPSEEK_API_KEY=sk-...
 
 # Trigger.dev
 TRIGGER_SECRET_KEY=tr_...
 
-# Daytona
+# Daytona (only needed for the simulation builder)
 DAYTONA_API_KEY=...
 
 # Sentry (optional)
@@ -208,19 +194,11 @@ npm run db:push
 # Start the Next.js dev server
 npm run dev
 
-# In a separate terminal, start the Trigger.dev dev worker
+# In a separate terminal, start the Trigger.dev worker
 npm run trigger:dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
-
-### Run tests
-
-```bash
-npm run test:simulation
-```
-
-The solver tests run directly in Node.js against the ES module files — no browser required. All 49 tests pass.
 
 ---
 
@@ -229,112 +207,98 @@ The solver tests run directly in Node.js against the ES module files — no brow
 ```
 app/
 ├── (app)/
-│   ├── layout.tsx               — sidebar layout (no auth)
-│   ├── page.tsx                 — home page (prompt composer)
+│   ├── layout.tsx               — sidebar layout
+│   ├── page.tsx                 — home page (review upload)
+│   └── review/[id]/
+│       └── page.tsx             — review results page
 │   └── simulations/[id]/
-│       └── page.tsx             — simulation view
-├── api/simulations/[id]/preview/
-│   └── route.ts                 — serves signed Daytona preview URL
-└── layout.tsx                   — root layout
+│       └── page.tsx             — simulation view (preserved)
 
 components/
-├── simulation-chat.tsx          — resizable split view (thread | preview)
-├── simulation-menu.tsx          — rename / delete
-├── new-simulation-composer.tsx  — home page prompt input
-├── chat-thread.tsx              — conversation panel + model picker
-├── chat-preview.tsx             — simulation iframe
-└── app-sidebar.tsx              — sidebar with recent simulations
+├── review-composer.tsx          — file upload + diff input
+├── review-results.tsx           — findings · tests · mappings tabs
+├── app-sidebar.tsx              — sidebar with review history + simulations
+├── simulation-chat.tsx          — simulation builder (preserved)
+└── ...
 
 lib/
-├── physics-lab/                 — core domain logic
-│   ├── actions.ts               — server actions (create, rename, delete)
-│   ├── agent.ts                 — model settings per Claude version
-│   ├── authorize.ts             — simple ownership check (no auth)
-│   ├── chat-actions.ts          — Trigger.dev session server actions
-│   ├── chat-session.ts          — session cleanup on delete
-│   ├── chat-store.ts            — thread persistence (load/save)
-│   ├── instructions/            — agent system prompt
-│   │   ├── workflow.ts          — physics constraints + full catalog docs
-│   │   ├── runtime.ts           — sandbox layout + solver API
-│   │   └── engine.ts            — three.js toolkit reference
-│   ├── model-catalog.ts         — model IDs and taglines
-│   ├── models.ts                — Anthropic provider instances
-│   ├── queries.ts               — DB read functions
-│   ├── runtime/                 — sandbox seed files (uploaded to Daytona)
-│   │   ├── simulation/          — physics solvers (browser ES modules)
-│   │   │   ├── models/          — 9 solver files
-│   │   │   ├── ui/              — report panel, plots, numeric inputs
-│   │   │   ├── index.js         — barrel export (31 solvers + utilities)
-│   │   │   ├── integration.js   — RK4 integrator
-│   │   │   ├── quality.js       — error / convergence analysis
-│   │   │   ├── units.js         — 34 quantity families, unit conversion
-│   │   │   └── validation.js    — field validation helpers
-│   │   └── engine/              — three.js rendering toolkit
-│   ├── seed.ts                  — reads runtime/ for upload to Daytona
-│   ├── suggestions.ts           — home-page prompt suggestions (10 scenarios)
-│   ├── title.ts                 — title length cap + truncation
-│   └── tools.ts                 — agent tool definitions (file I/O + ask_user)
-├── daytona/                     — sandbox create / start / delete
-├── db/                          — Drizzle schema + client (simulations table)
-└── billing/                     — step cost tracking only (no credit gates)
+├── llm/                         — multi-provider LLM abstraction
+│   ├── provider.ts              — reads LLM_PROVIDER env var
+│   ├── models.ts                — Claude / OpenAI / DeepSeek instances
+│   ├── catalog.ts               — UI model list per provider
+│   └── index.ts
+├── physics-lab/
+│   ├── knowledge-base/          — physics law registry
+│   │   ├── laws.ts              — 14 laws with equations, units, bugs, test templates
+│   │   └── index.ts
+│   ├── instructions/
+│   │   ├── law-mapper.ts        — system prompt: codebase → law mapping
+│   │   ├── test-generator.ts    — system prompt: law mappings → test code
+│   │   ├── reviewer.ts          — system prompt: physics violation review
+│   │   └── ... (simulation builder instructions preserved)
+│   ├── review-actions.ts        — server actions: createReviewJob · deleteReviewJob
+│   ├── review-store.ts          — DB persistence for review jobs
+│   └── queries.ts               — listReviewJobs · getReviewJob (+ simulation queries)
+├── db/
+│   └── schema.ts                — review_jobs table (added) + simulations table
 
 trigger/
-└── chat.ts                      — simulationChat durable agent task
-
-tests/
-└── simulation/                  — Node.js unit tests (49 tests, 0 failures)
-
-public/
-└── architecture.svg             — system architecture diagram
+├── review.ts                    — physics review task (3 passes)
+└── chat.ts                      — simulation chat agent (preserved)
 ```
 
 ---
 
-## Adding a physics solver
+## Extending the knowledge base
 
-1. **Write the solver** in `lib/physics-lab/runtime/simulation/models/your-model.js` as a plain browser ES module.
-   - Accept `{ value, unit }` quantity objects for every physical input.
-   - Return SI values only. Convert at the edges with `convertUnit` or `convertTemperature`.
-   - Export a `YOUR_MODEL_METADATA` constant with `id`, `name`, `assumptions`, `governingEquation(s)`, and `outputUnits`.
-   - Throw on bad input — never return `NaN` or a silent default.
+Add a new law to [`lib/physics-lab/knowledge-base/laws.ts`](lib/physics-lab/knowledge-base/laws.ts):
 
-2. **Export from the barrel** [`lib/physics-lab/runtime/simulation/index.js`](lib/physics-lab/runtime/simulation/index.js).
+```ts
+const MY_LAW: PhysicsLaw = {
+  id: "my-law-kebab-id",
+  name: "My Law Name",
+  domain: "classical-mechanics",  // or fluid-mechanics, thermodynamics, etc.
+  equations: ["F = ma", "..."],
+  quantities: [
+    { symbol: "F", description: "force", siUnit: "N" },
+    // ...
+  ],
+  assumptions: ["assumption 1", "assumption 2"],
+  validityRanges: [
+    { condition: "v ≪ c", reason: "non-relativistic only" },
+  ],
+  commonBugs: [
+    "forgetting the ½ factor",
+    "unit mismatch: degrees vs radians",
+  ],
+  testTemplates: [
+    {
+      id: "my-law-benchmark",
+      kind: "analytical_benchmark",
+      description: "Known input → known output",
+      assertion: "result = 42.0 ± 0.001",
+    },
+  ],
+  solverFunctions: ["myLawSolverFunctionName"],
+}
+```
 
-3. **Add units** for any new physical quantity to [`lib/physics-lab/runtime/simulation/units.js`](lib/physics-lab/runtime/simulation/units.js).
-
-4. **Document the solver** in the physics catalog section of [`lib/physics-lab/instructions/workflow.ts`](lib/physics-lab/instructions/workflow.ts) and in the import example in [`lib/physics-lab/instructions/runtime.ts`](lib/physics-lab/instructions/runtime.ts).
-
-5. **Add a suggestion** to [`lib/physics-lab/suggestions.ts`](lib/physics-lab/suggestions.ts).
-
-6. **Write tests** under `tests/simulation/` and run `npm run test:simulation`.
+Then add it to the `PHYSICS_LAWS` array at the bottom of the file. The review and test-generation agents automatically pick it up.
 
 ---
 
-## Agent constraints
+## Simulation builder (preserved)
 
-The agent prompt enforces strict physics integrity. The agent **cannot**:
-
-- Invent a physical input, constant, or governing equation
-- Write a physics solver outside `simulation/`
-- Use `engine/physics.js` to produce a reported quantity (it is unverified arcade physics)
-- Violate, approximate around, or otherwise break a conservation law
-- Claim a result is safe, certified, or code-compliant
-- Display a number without its unit
-- Apply a default silently — every default must be offered explicitly and confirmed
-
-Any request for physics outside the catalog receives an honest refusal and, where appropriate, an offer of a clearly labelled conceptual visualization.
+The original Physics Simulation Lab is fully preserved and accessible. `/simulations/[id]` works as before. The simulation builder uses the same multi-provider LLM abstraction — set `LLM_PROVIDER` and it uses the configured provider there too.
 
 ---
 
 ## Contributing
 
-Contributions welcome. The most useful additions are new validated physics solvers — see *Adding a physics solver* above.
-
-Please ensure:
-- New solvers include unit tests under `tests/simulation/`
-- The governing equations, assumptions, and limitations are documented in the solver file itself
-- The solver throws on invalid input rather than returning a sentinel value
-- All 49 existing tests continue to pass (`npm run test:simulation`)
+The most impactful contributions:
+1. **New laws in the knowledge base** — more coverage means more bugs caught
+2. **Language-specific test templates** — the generator knows physics but you know Python idioms
+3. **Bug pattern examples** — if you've seen a physics bug in the wild, document it
 
 ---
 

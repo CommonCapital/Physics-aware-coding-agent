@@ -2,7 +2,7 @@ import "server-only"
 
 import { desc, eq } from "drizzle-orm"
 
-import { db, simulations, type Simulation } from "@/lib/db"
+import { db, simulations, reviewJobs, type Simulation, type ReviewJob } from "@/lib/db"
 
 /**
  * All simulations, newest first.
@@ -33,4 +33,30 @@ export async function getSimulation(
     .limit(1)
 
   return simulation
+}
+
+/**
+ * All review jobs, newest first.
+ */
+export async function listReviewJobs(): Promise<ReviewJob[]> {
+  return db.select().from(reviewJobs).orderBy(desc(reviewJobs.createdAt))
+}
+
+/**
+ * A single review job by id, or `undefined` when it doesn't exist.
+ */
+export async function getReviewJob(
+  id: string
+): Promise<ReviewJob | undefined> {
+  if (!UUID_RE.test(id)) {
+    return undefined
+  }
+
+  const [job] = await db
+    .select()
+    .from(reviewJobs)
+    .where(eq(reviewJobs.id, id))
+    .limit(1)
+
+  return job
 }
