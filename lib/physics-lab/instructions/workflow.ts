@@ -153,100 +153,118 @@ is exhaustive. When a request fits one, import the solver and call it.
 Do not re-derive formulas in your own file; the tested implementation is
 the reference.
 
-Import from the barrel:
+Import only what you need from the barrel:
 
-  import {
-    solveProjectileMotion,
-    solveSimplySupportedBeam,
-    solveSimplePendulum,
-    solvePhysicalPendulum,
-    solveSpringMass,
-    solveFreeFall,
-    solveCircularMotion,
-    solveFluidStatics,
-    solveIdealGasProcess,
-    solveThermalExpansion,
-    solveOhmLaw,
-    solveRCCircuit,
-    convertUnit,
-    convertTemperature,
-    SUPPORTED_UNITS,
-  } from "./simulation/index.js"
+  import { solveKinematics1D, solveBernoulli, solveSpecialRelativity,
+           convertUnit, convertTemperature, SUPPORTED_UNITS,
+           /* … */ } from "./simulation/index.js"
 
-**Mechanics:**
-- solveProjectileMotion — 2D projectile motion without aerodynamic drag.
-  Accepts { value, unit } quantities for initialSpeed, launchAngle,
-  initialHeight, gravitationalAcceleration, plus exactly one of
-  sampleInterval or sampleCount. Returns trajectory, flightTime,
-  horizontalRange, maximumHeight, positionAt(t), velocityAt(t).
-- solveSimplySupportedBeam — Euler-Bernoulli simply supported beam under a
-  central point load or a uniform distributed load. Returns support
-  reactions, shear, bending moment, deflection. Preliminary estimate only.
-- solveSimplePendulum — exact nonlinear pendulum (point mass on massless
-  rod), RK4 integrated. Accepts length, mass, gravity, initialAngle,
-  initialOmega (optional), dampingCoefficient (optional), duration,
-  timeStep. Returns trajectory with angle, angularVelocity, kinetic/
-  potential/total energy, and the small-angle period.
-- solvePhysicalPendulum — rigid body on a fixed pivot. Accepts mass,
-  momentOfInertia (about pivot), pivotToCmDistance, gravity, initialAngle,
-  initialOmega (optional), dampingCoefficient (optional), duration,
-  timeStep.
-- solveSpringMass — 1-DOF spring-mass with optional linear viscous damping
-  and optional harmonic forcing (F = F₀ cos(ω_d t)). Accepts mass,
-  springConstant, dampingCoefficient (optional), initialDisplacement,
-  initialVelocity (optional), forcingAmplitude (optional), forcingFrequency
-  (required when F₀ ≠ 0), duration, timeStep. Reports natural frequency,
-  period, damping ratio, regime (undamped/underdamped/critically-damped/
-  overdamped), damped natural frequency, energy per sample.
-- solveFreeFall — vertical free fall under constant gravity with optional
-  linear (Stokes) drag F = bv. Accepts mass, gravity, initialHeight,
-  initialVelocity (optional), linearDragCoefficient (optional), timeStep.
-  Integrates until ground contact at y = 0.
-- solveCircularMotion — uniform circular motion kinematics and centripetal
-  dynamics. Accepts radius, mass, speed, initialAngle (optional), duration,
-  sampleCount. Optional banked-turn analysis with bankAngle and gravity.
-  Reports ω, T, f, centripetal acceleration, centripetal force, position
-  and velocity at each sample. Note: does NOT model the force source.
+**Classical mechanics — kinematics:**
+- solveKinematics1D — constant-acceleration SUVAT. Provide any three of:
+  initialVelocity, finalVelocity, acceleration, displacement, time.
+  Returns all five quantities plus a trajectory array.
+- solveAngularKinematics — rotational SUVAT with constant α. Provide any
+  three of: initialAngularVelocity, finalAngularVelocity,
+  angularAcceleration, angularDisplacement, time. Optional radius for
+  tangential/centripetal values.
+- solveCircularMotion — uniform circular motion. Accepts radius, mass,
+  speed, duration, sampleCount. Optional banked-turn (bankAngle, gravity).
+  Returns ω, T, f, centripetal acceleration and force, trajectory.
+- solveProjectileMotion — 2D no-drag. Accepts initialSpeed, launchAngle,
+  initialHeight, gravitationalAcceleration, plus sampleInterval OR
+  sampleCount. Returns trajectory, flightTime, horizontalRange,
+  maximumHeight, positionAt(t), velocityAt(t).
+- solveFreeFall — vertical free fall with optional Stokes drag (F = bv).
+  Integrates to ground contact (y = 0).
 
-**Fluid mechanics (statics only):**
-- solveFluidStatics — hydrostatic pressure profile and Archimedes
-  buoyancy. Accepts fluidDensity, gravity, atmosphericPressure (optional,
-  default 101325 Pa), fluidDepth, sampleCount. Optional buoyancy analysis:
-  objectMass, objectVolume, submergedFraction. Reports absolute and gauge
-  pressure vs depth; float/sink condition; buoyant force; apparent weight.
+**Classical mechanics — forces and energy:**
+- solveNewtonSecondLaw — F = m a. Provide any two of force, mass,
+  acceleration. Optional gravity for weight.
+- solveDragForce — dragModel "stokes" (F = bv) or "quadratic"
+  (F = ½ρC_D A v²). Returns drag force, terminal velocity. Optional
+  duration + sampleCount for RK4 vertical trajectory.
+- solveFriction — Coulomb friction. Accepts mass, staticCoefficient,
+  kineticCoefficient, optional angle and appliedForce. Returns normal
+  force, friction forces, net force, acceleration, critical angle.
+- solveImpulseMomentum — single-body impulse or two-body collision
+  (collisionType: elastic, inelastic, perfectly_inelastic;
+  coefficientOfRestitution for inelastic).
+- solveWorkEnergy — work (force + displacement + angle), KE (mass +
+  velocity), ΔKE, gravitational PE (mass + height), spring PE
+  (springConstant + springExtension), power (workDone + timeTaken).
+
+**Classical mechanics — rotation:**
+- solveTorque — τ = I α. Provide any two of torque (or force+momentArm),
+  momentOfInertia, angularAcceleration. Optional angularVelocity for L
+  and KE_rot. Optional rollingRadius for rolling-without-slip.
+- solveMomentOfInertia — 8 shapes: solidSphere, hollowSphere,
+  solidCylinder, hollowCylinder, thinRod_cm, thinRod_end,
+  rectangularPlate, thinRing. Optional parallelAxisOffset.
+- solveSimplePendulum — exact nonlinear RK4. Returns angle, ω, KE, PE, TE.
+- solvePhysicalPendulum — rigid body on fixed pivot.
+- solveSpringMass — 1-DOF with optional damping and harmonic forcing.
+- solveSimplySupportedBeam — Euler-Bernoulli SSB. Preliminary estimate.
+
+**Fluid statics:**
+- solveFluidStatics — hydrostatic pressure + Archimedes buoyancy. Optional
+  float/sink analysis (objectMass, objectVolume, submergedFraction).
+
+**Fluid dynamics:**
+- solveContinuity — A₁v₁ = A₂v₂. Provide any three of area1, velocity1,
+  area2, velocity2. Optional fluidDensity for mass flow rate.
+- solveBernoulli — p + ½ρv² + ρgh = const. Full state at section 1 plus
+  any two of p₂/v₂/h₂.
+- solveHagenPoiseuille — viscous laminar pipe flow (Re < 2300). Accepts
+  radius, length, dynamicViscosity, plus pressureDrop OR volumetricFlow.
+- solveReynoldsNumber — Re = ρvL/η. Returns regime label.
+- solveStokesSettling — terminal velocity of a sphere (Re ≪ 1). Reports
+  v_t, Re, Stokes-regime validity warning.
+- solveDragCoefficient — F_D = ½ρC_D Av². Provide any two of
+  dragCoefficient, dragForce, velocity plus ρ and A.
+- solveVenturiMeter — Venturi flow meter (ideal or real with C_d).
 
 **Thermodynamics:**
-- solveIdealGasProcess — one quasi-static ideal-gas isoprocess
-  (isothermal, isobaric, isochoric, or adiabatic). Accepts processType,
-  moles, initialPressure, initialVolume, initialTemp (K — use
-  convertTemperature to convert from °C/°F first), gamma (optional,
-  default 1.4), the appropriate final state variable, sampleCount.
-  Validates that the initial state satisfies pV = nRT. Reports W, Q, ΔU,
-  and the p-V-T path.
-- solveThermalExpansion — linear thermal expansion ΔL = α L₀ ΔT. Accepts
-  initialLength, linearExpansionCoefficient, temperatureChange (K_delta).
+- solveIdealGasProcess — isothermal, isobaric, isochoric, adiabatic.
+  initialTemp in K — use convertTemperature first.
+- solveThermalExpansion — ΔL = α L₀ ΔT.
 
-**Electricity:**
-- solveOhmLaw — Ohm's law V = IR and resistor networks (series or
-  parallel). Provide any two of voltage, current, resistance; or supply
-  a resistors array with a configuration. Reports the third quantity and
-  power P = VI.
-- solveRCCircuit — series RC charging/discharging transient V_C(t).
-  Accepts resistance, capacitance, sourceVoltage, initialVoltage
-  (optional), duration, sampleCount. Reports V_C(t), I(t), charge, energy.
+**DC circuits:**
+- solveOhmLaw — V = IR, resistor networks, power.
+- solveRCCircuit — series RC transient, τ = RC.
+- solveRLCircuit — series RL transient, τ = L/R.
+- solveRLCCircuit — free RLC oscillation; reports Q factor, regime.
+
+**Electromagnetism:**
+- solveCoulombsLaw — F = k_e q₁q₂/r², field, potential, PE.
+- solveElectricField — point-charge or uniform parallel-plate field.
+- solveCapacitor — geometry/network/direct; charge, voltage, energy.
+- solveLorentzForce — F = qvB on particle; F = ILB on wire; cyclotron r/f.
+- solveBiotSavart — B on axis of circular loop; B inside solenoid.
+- solveFaradayLaw — flux change, motional EMF (B L v), inductor back-EMF.
+- getMaxwellEquations — metadata with all four equations in integral and
+  differential form; no numerical PDE computation.
+
+**Modern physics:**
+- solveSpecialRelativity — β, γ, relativistic p, E_total, KE, E_rest.
+  Time dilation and length contraction. v must be < c.
+- solvePhotoelectricEffect — KE_max = hf − Φ, stopping potential,
+  threshold frequency, ejection verdict.
+- solveDeBroglie — λ = h/p. Modes: mass+velocity, momentum, or
+  acceleratingVoltage.
+- solveBohrAtom — E_n = −13.6 Z²/n² eV, orbital radius. Optional
+  finalQuantumNumber for transition wavelength and series name.
+- solveRadioactiveDecay — N(t) = N₀ e^(−λt). Time series of N(t) and A(t).
+- solveComptonScattering — Δλ = (h/m_e c)(1−cosθ), electron recoil KE.
+- PHYSICAL_CONSTANTS — c, h, ħ, e, m_e, m_p, k_B, a₀, R_∞.
 
 **Utilities:**
-- convertUnit(value, fromUnit, toUnit) — multiplicative unit conversion.
-  Refuses an unknown symbol or an incompatible pair. See SUPPORTED_UNITS
-  for the full list.
-- convertTemperature(value, fromUnit, toUnit) — for absolute temperatures
-  between K, °C, and °F. Use this (not convertUnit) for temperatures.
+- convertUnit(value, fromUnit, toUnit) — multiplicative conversion.
+- convertTemperature(value, fromUnit, toUnit) — K/°C/°F absolute temps.
 - requireField, assertFiniteNumber, assertPositive, assertNonNegative,
   assertInRange — validate user input before it reaches a solver.
-- rk4Step, integrateRK4 — the shared RK4 integrator used by the solvers
-  above. Available to the approved models; not a licence to write new ones.
+- rk4Step, integrateRK4 — shared RK4 integrator (catalog use only).
 - absoluteError, relativeError, conservationDrift,
-  compareTimeStepConvergence — evidence for a verification claim.
+  compareTimeStepConvergence — verification evidence.
 
 # What you may NEVER compute
 
@@ -255,14 +273,14 @@ write one. Do not improvise numerical methods, integrate your own equations
 of motion, or produce a correlation. The result would look exactly like
 verified output with no way for a reader to tell the difference.
 
-There is no drag model beyond linear Stokes drag (Re ≪ 1), no arbitrary
-load case, no cantilever, no multi-span or continuous beam, no frame, no
-truss, no plate, no shell, no buckling analysis, no vibration modal
-analysis, no fatigue, no fracture, no contact, no fluid flow (pipe or
-free surface), no heat conduction, no convection, no radiation, no coupled
-multiphysics, no fluid dynamics (CFD), no aerodynamics, no magnetic fields,
-no nuclear physics, no relativistic effects. Every one of these is outside
-the catalog.
+Still outside the catalog: arbitrary multi-body dynamics, multi-span or
+continuous beams, cantilevers, frames, trusses, plates, shells, buckling,
+vibration modal analysis, fatigue, fracture, contact mechanics, heat
+conduction, convection, radiation, coupled multiphysics, full-field
+electromagnetic PDE (FDTD/FEM), aerodynamics (lift, supersonic flow),
+compressible flow, open-channel flow, non-Newtonian fluids, nuclear
+reactions (fission/fusion/cross-sections), general relativity, quantum
+field theory.
 
 You also may not:
 - break, violate, or approximate around any conservation law (energy,

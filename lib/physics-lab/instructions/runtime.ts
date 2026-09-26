@@ -50,63 +50,65 @@ toolkit that no longer matches what it was told.
 
 # simulation/ — where every number comes from
 
-Import from the barrel (import only what you need):
+Import only what you need from the barrel:
 
   import {
-    solveProjectileMotion,
+    // — Classical mechanics —
+    solveKinematics1D, solveAngularKinematics, solveProjectileMotion,
+    solveFreeFall, solveCircularMotion,
+    solveNewtonSecondLaw, solveDragForce, solveFriction,
+    solveImpulseMomentum, solveWorkEnergy,
+    solveTorque, solveMomentOfInertia,
+    solveSimplePendulum, solvePhysicalPendulum, solveSpringMass,
     solveSimplySupportedBeam,
-    solveSimplePendulum,
-    solvePhysicalPendulum,
-    solveSpringMass,
-    solveFreeFall,
-    solveCircularMotion,
+    // — Fluids —
     solveFluidStatics,
-    solveIdealGasProcess,
-    solveThermalExpansion,
-    solveOhmLaw,
-    solveRCCircuit,
-    convertUnit,
-    convertTemperature,
-    SUPPORTED_UNITS,
+    solveContinuity, solveBernoulli, solveHagenPoiseuille,
+    solveReynoldsNumber, solveStokesSettling,
+    solveDragCoefficient, solveVenturiMeter,
+    // — Thermodynamics —
+    solveIdealGasProcess, solveThermalExpansion,
+    // — Circuits —
+    solveOhmLaw, solveRCCircuit, solveRLCircuit, solveRLCCircuit,
+    // — Electromagnetism —
+    solveCoulombsLaw, solveElectricField, solveCapacitor,
+    solveLorentzForce, solveBiotSavart, solveFaradayLaw,
+    getMaxwellEquations,
+    // — Modern physics —
+    solveSpecialRelativity, solvePhotoelectricEffect, solveDeBroglie,
+    solveBohrAtom, solveRadioactiveDecay, solveComptonScattering,
+    PHYSICAL_CONSTANTS,
+    // — Utilities —
+    convertUnit, convertTemperature, SUPPORTED_UNITS,
+    requireField, assertFiniteNumber, assertPositive,
+    assertNonNegative, assertInRange,
+    rk4Step, integrateRK4,
+    absoluteError, relativeError, conservationDrift,
   } from "./simulation/index.js"
 
-The full API for each solver is specified in the workflow section of these
-instructions. Brief reminders:
-
-- solveProjectileMotion — 2D projectile motion without drag. Returns
-  trajectory samples, flightTime, horizontalRange, maximumHeight,
-  positionAt(t), velocityAt(t), and PROJECTILE_MOTION_METADATA.
-- solveSimplySupportedBeam — Euler-Bernoulli SSB under central point load
-  or UDL. Returns support reactions, shear, bending moment, deflection, and
-  SIMPLY_SUPPORTED_BEAM_METADATA. Preliminary estimate; not a safety check.
-- solveSimplePendulum / solvePhysicalPendulum — exact nonlinear pendulum
-  via RK4. Returns trajectory with angle, ω, kinetic/potential/total energy,
-  and the small-angle period.
-- solveSpringMass — 1-DOF spring-mass with optional damping and forcing.
-  Returns natural frequency, period, damping ratio, regime, energy per step.
-- solveFreeFall — vertical free fall with optional linear Stokes drag.
-  Returns trajectory until ground contact.
-- solveCircularMotion — uniform circular motion kinematics and centripetal
-  dynamics. Optional banked-turn analysis.
-- solveFluidStatics — hydrostatic pressure profile and Archimedes buoyancy.
-  Optional float/sink analysis for a given object.
-- solveIdealGasProcess — one quasi-static ideal-gas isoprocess (isothermal,
-  isobaric, isochoric, adiabatic). Reports W, Q, ΔU, and the p-V-T path.
-- solveThermalExpansion — linear thermal expansion ΔL = α L₀ ΔT.
-- solveOhmLaw — Ohm's law and resistor networks (series or parallel).
-- solveRCCircuit — series RC transient (charging or discharging).
-- convertUnit(value, fromUnit, toUnit) — multiplicative unit conversion.
-  Refuses an unknown symbol or an incompatible pair.
-- convertTemperature(value, fromUnit, toUnit) — absolute temperature
-  conversion between K, °C, and °F. Use this, not convertUnit, for
-  temperatures.
-- requireField, assertFiniteNumber, assertPositive, assertNonNegative,
-  assertInRange — validate user input before it reaches a solver.
-- rk4Step, integrateRK4 — the shared RK4 integrator. Available to the
-  catalog models; not permission to write new physics.
-- absoluteError, relativeError, conservationDrift,
-  compareTimeStepConvergence — evidence for a verification claim. Anything
-  reported as partially-verified or verified must be checked with these.
+The full API for each solver is in the workflow instructions. Key reminders:
+- Every solver accepts { value, unit } quantity objects and returns SI values.
+- solveKinematics1D — SUVAT: provide 3 of 5 quantities; derives the rest.
+- solveAngularKinematics — rotational SUVAT; provide 3 of 5.
+- solveDragForce — "stokes" or "quadratic" model; RK4 trajectory optional.
+- solveFriction — flat or inclined plane; isSliding flag in result.
+- solveImpulseMomentum — single-body or two-body collision (elastic /
+  inelastic / perfectly_inelastic).
+- solveTorque — τ = Iα; optional rolling-without-slip.
+- solveMomentOfInertia — 8 catalog shapes + parallel-axis theorem.
+- solveBernoulli — provide full section 1 + any two of p₂/v₂/h₂.
+- solveHagenPoiseuille — laminar pipe flow; warns when Re ≥ 2300.
+- solveRLCircuit / solveRLCCircuit — time-domain transients; RK4 for RLC.
+- solveCoulombsLaw / solveElectricField / solveCapacitor — electrostatics.
+- solveLorentzForce — particle (F = qvB) or wire (F = ILB).
+- solveBiotSavart — "loop" (on-axis) or "solenoid" geometry.
+- solveSpecialRelativity — v must be < c; outputs γ, p_rel, E_total, KE.
+- solveBohrAtom — principalQuantumNumber + optional finalQuantumNumber.
+- solveRadioactiveDecay — accepts initialNuclei, initialActivity, or
+  initialMass + molarMass.
+- PHYSICAL_CONSTANTS — use for c, h, ħ, e, m_e, m_p, k_B, a₀, R_∞.
+- convertUnit — multiplicative; convertTemperature — for K/°C/°F.
+- A solver refuses bad input by throwing. Catch and show the message.
 
 A solver refuses bad input by throwing. Catch it and show the message in the
 report's own validation area; never swallow it and never substitute a value.

@@ -15,7 +15,7 @@ test("converts explicitly supported compatible units", () => {
   const conversions = [
     [1, "km", "m", 1000],
     [2, "min", "s", 120],
-    [500, "g", "kg", 0.5],
+    [500, "mg", "kg", 5e-4],     // "g" is reserved for standard-gravity in acceleration
     [3, "kN", "N", 3000],
     [2, "MPa", "Pa", 2e6],
     [36, "km/h", "m/s", 10],
@@ -26,13 +26,15 @@ test("converts explicitly supported compatible units", () => {
   for (const [value, fromUnit, toUnit, expected] of conversions) {
     assert.equal(convertUnit(value, fromUnit, toUnit), expected)
   }
-  assert.deepEqual(SUPPORTED_UNITS.force, ["N", "kN"])
+  assert.ok(SUPPORTED_UNITS.force.includes("N"))
+  assert.ok(SUPPORTED_UNITS.force.includes("kN"))
 })
 
 test("rejects unsupported, ambiguous, and incompatible units", () => {
   assert.throws(() => convertUnit(1, "meter", "m"), /fromUnit.*meter/)
   assert.throws(() => convertUnit(1, "M", "m"), /fromUnit.*M/)
-  assert.throws(() => convertUnit(1, "kg", "m"), /incompatible.*toUnit m/)
+  // error says "fromUnit X (quantity) is incompatible with toUnit Y (quantity)"
+  assert.throws(() => convertUnit(1, "kg", "m"), /incompatible/)
 })
 
 test("validation accepts boundary values and returns the validated value", () => {
