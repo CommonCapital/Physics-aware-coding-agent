@@ -9,6 +9,7 @@ import {
   InputGroupAddon,
   InputGroupTextarea,
 } from "@/components/ui/input-group"
+import type { GameModelId } from "@/lib/physics-lab/model-catalog"
 
 
 export function ChatComposer({
