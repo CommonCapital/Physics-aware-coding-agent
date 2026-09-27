@@ -155,6 +155,7 @@ if __name__ == "__main__":
 
     t, x, v, E = simulate(params)
 
-    print(f"Initial energy    : {E[0]:.5f} J")
-    print(f"Final energy      : {E[-1]:.5f} J")
-    print(f"Final position    : {x[-1]:+.5f} m")
+    # Demonstrate RK4 instability (will blow up due to Bug 5)
+    print("\nSimulating spring-mass (expect NaN/inf due to unstable dt):")
+    states = simulate()
+    print(f"Final position: {states[-1][1]}")
