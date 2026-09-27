@@ -6,10 +6,12 @@
  *   balanced  — quality/speed tradeoff (used for iterating)
  *   fast      — lowest latency + cost (used for title gen, quick fixes)
  *
- * DeepSeek is accessed through its OpenAI-compatible API endpoint.
+ * DeepSeek uses its dedicated provider rather than the OpenAI one: the OpenAI
+ * provider defaults to the Responses API, which DeepSeek does not implement.
  */
 
 import { createAnthropic } from "@ai-sdk/anthropic"
+import { createDeepSeek } from "@ai-sdk/deepseek"
 import { createOpenAI } from "@ai-sdk/openai"
 
 import type { LLMProvider } from "./provider"
@@ -63,9 +65,8 @@ function getOpenAIModel(tier: ModelTier): AnyLanguageModel {
 }
 
 function getDeepSeekModel(tier: ModelTier): AnyLanguageModel {
-  const deepseek = createOpenAI({
+  const deepseek = createDeepSeek({
     apiKey: process.env.DEEPSEEK_API_KEY,
-    baseURL: "https://api.deepseek.com/v1",
   })
   return deepseek(DEEPSEEK_MODELS[tier])
 }
