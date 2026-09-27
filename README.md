@@ -5,6 +5,27 @@
 Catch the bugs that don't crash but give wrong answers: unit mix-ups, unstable time steps, sign errors, formulas applied outside their valid range.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Built with IBM Bob 2.0](https://img.shields.io/badge/Built%20with-IBM%20Bob%202.0-blue)](bob_sessions/README.md)
+
+---
+
+## Built with IBM Bob 2.0
+
+This project was built end-to-end using [IBM Bob 2.0](https://www.ibm.com/bob) as the AI coding agent.
+
+| What Bob helped build | Files |
+|---|---|
+| Full product architecture design | — |
+| Multi-provider LLM abstraction (Claude/OpenAI/DeepSeek) | `lib/llm/` |
+| Physics knowledge base — 14 laws with equations, validity ranges, bug patterns | `lib/physics-lab/knowledge-base/` |
+| Agent system prompts for law mapping, test generation, PR review | `lib/physics-lab/instructions/` |
+| Trigger.dev 3-pass review task with Zod-validated structured output | `trigger/review.ts` |
+| Review UI: upload composer, findings/tests/mappings results page | `components/review-*.tsx` |
+| DB schema, server actions, store, queries | `lib/db/schema.ts`, `lib/physics-lab/review-*.ts` |
+| Planted-bug example project for demo | `examples/spring_mass_sim.py` |
+| Bug fixes: `generateObject` migration, line numbers, auto-refresh | Throughout |
+
+Full session screenshots: [`bob_sessions/`](bob_sessions/README.md)
 
 ---
 

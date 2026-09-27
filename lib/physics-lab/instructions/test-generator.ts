@@ -116,5 +116,7 @@ Return a JSON array. Each element:
 - For analytical benchmarks, include the derivation in a comment so a reviewer can verify it by hand.
 - Do NOT test for internal implementation details. Test observable physical behaviour.
 
-Return ONLY the JSON array. No explanation, no markdown fences.`
+Return ONLY a JSON object with a "tests" key containing the array. No explanation, no markdown fences.
+
+Example: {"tests": [...]}`
 }

@@ -212,8 +212,8 @@ const PROJECTILE_MOTION: PhysicsLaw = {
     {
       id: "projectile-45-degree",
       kind: "analytical_benchmark",
-      description: "θ=45°, v₀=10 m/s → R = v₀²/g = 10.194 m",
-      assertion: "range(v0=10, theta=45°) ≈ 10.194 m ± 0.001 m",
+      description: "θ=45°, v₀=10 m/s → R = v₀²/g = 10²/9.80665 = 10.197 m",
+      assertion: "range(v0=10, theta=45°) ≈ 10.197 m ± 0.001 m",
     },
     {
       id: "projectile-angle-unit",

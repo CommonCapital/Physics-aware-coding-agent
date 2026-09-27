@@ -10,7 +10,7 @@
  */
 
 import { schemaTask } from "@trigger.dev/sdk"
-import { generateText } from "ai"
+import { generateObject } from "ai"
 import { z } from "zod"
 
 import { ACTIVE_PROVIDER, getModel, getModelId } from "@/lib/llm"
@@ -31,28 +31,54 @@ import type { LawMapping, ReviewFinding, GeneratedTest } from "@/lib/physics-lab
 
 const MAX_TOKENS_PER_PASS = 8192
 
-/**
- * Safely parse JSON from an LLM response, returning a fallback on failure.
- */
-function safeParseJson<T>(text: string, fallback: T): T {
-  const cleaned = text
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim()
+// ─── Zod schemas for structured LLM output ───────────────────────────────────
 
-  try {
-    return JSON.parse(cleaned) as T
-  } catch {
-    logger.warn("Failed to parse LLM JSON response", {
-      "response.length": text.length,
-      "response.preview": text.slice(0, 200),
-    })
-    return fallback
-  }
-}
+const LawMappingSchema = z.object({
+  functionName: z.string(),
+  file: z.string(),
+  lines: z.string().optional(),
+  detectedLaws: z.array(z.string()),
+  confidence: z.enum(["high", "medium", "low"]),
+  notes: z.string().optional(),
+})
+
+const LawMappingsSchema = z.object({
+  mappings: z.array(LawMappingSchema),
+})
+
+const GeneratedTestSchema = z.object({
+  templateId: z.string(),
+  lawId: z.string(),
+  kind: z.string(),
+  description: z.string(),
+  code: z.string(),
+  language: z.string(),
+})
+
+const GeneratedTestsSchema = z.object({
+  tests: z.array(GeneratedTestSchema),
+})
+
+const ReviewFindingSchema = z.object({
+  lawId: z.string().nullable().optional(),
+  lawName: z.string(),
+  severity: z.enum(["critical", "warning", "info"]),
+  file: z.string(),
+  lines: z.string().optional(),
+  message: z.string(),
+  suggestedFix: z.string().optional(),
+})
+
+const ReviewResultSchema = z.object({
+  findings: z.array(ReviewFindingSchema),
+  summary: z.string(),
+})
+
+// ─── Build source message with line numbers ───────────────────────────────────
 
 /**
  * Build a user message containing the source code files.
+ * Each line is prefixed with its line number so the model can cite exact locations.
  */
 function buildSourceMessage(
   files: Array<{ path: string; content: string }>,
@@ -66,13 +92,17 @@ function buildSourceMessage(
 
   for (const file of files) {
     const ext = file.path.split(".").pop() ?? "text"
-    parts.push(
-      `## File: ${file.path}\n\n\`\`\`${ext}\n${file.content}\n\`\`\``
-    )
+    const numbered = file.content
+      .split("\n")
+      .map((line, i) => `${String(i + 1).padStart(4, " ")} | ${line}`)
+      .join("\n")
+    parts.push(`## File: ${file.path}\n\n\`\`\`${ext}\n${numbered}\n\`\`\``)
   }
 
   return parts.join("\n\n")
 }
+
+// ─── Task ─────────────────────────────────────────────────────────────────────
 
 export const physicsReviewTask = schemaTask({
   id: "physics-review",
@@ -82,7 +112,6 @@ export const physicsReviewTask = schemaTask({
   run: async ({ jobId }) => {
     const startedAt = performance.now()
 
-    // Load the job
     const job = await loadReviewJob(jobId)
 
     if (!job) {
@@ -101,20 +130,21 @@ export const physicsReviewTask = schemaTask({
 
     const sourceMessage = buildSourceMessage(job.sourceFiles, job.diff)
 
-    // ─── Pass 1: Law Mapping ────────────────────────────────────────────────
+    // ─── Pass 1: Law Mapping ──────────────────────────────────────────────────
     let mappings: LawMapping[] = []
 
     try {
       const mapStartedAt = performance.now()
 
-      const mapResult = await generateText({
+      const mapResult = await generateObject({
         model: getModel("balanced", ACTIVE_PROVIDER),
         system: lawMapperInstructions(job.language),
         prompt: sourceMessage,
+        schema: LawMappingsSchema,
         maxOutputTokens: MAX_TOKENS_PER_PASS,
       })
 
-      mappings = safeParseJson<LawMapping[]>(mapResult.text, [])
+      mappings = mapResult.object.mappings as LawMapping[]
 
       await saveReviewMappings(jobId, mappings)
 
@@ -129,24 +159,25 @@ export const physicsReviewTask = schemaTask({
         "review.id": jobId,
         ...describeError(error),
       })
-      // Continue with empty mappings — tests and review may still work
+      // Continue with empty mappings — review pass can still run
     }
 
-    // ─── Pass 2: Test Generation ────────────────────────────────────────────
+    // ─── Pass 2: Test Generation ──────────────────────────────────────────────
     let generatedTests: GeneratedTest[] = []
 
     if (mappings.length > 0) {
       try {
         const testStartedAt = performance.now()
 
-        const testResult = await generateText({
+        const testResult = await generateObject({
           model: getModel("balanced", ACTIVE_PROVIDER),
           system: testGeneratorInstructions(job.language, mappings),
           prompt: sourceMessage,
+          schema: GeneratedTestsSchema,
           maxOutputTokens: MAX_TOKENS_PER_PASS,
         })
 
-        generatedTests = safeParseJson<GeneratedTest[]>(testResult.text, [])
+        generatedTests = testResult.object.tests as GeneratedTest[]
 
         logger.info(logger.fmt`Test generation complete for job ${jobId}`, {
           "review.id": jobId,
@@ -162,37 +193,28 @@ export const physicsReviewTask = schemaTask({
       }
     }
 
-    // ─── Pass 3: Physics Review ─────────────────────────────────────────────
+    // ─── Pass 3: Physics Review ───────────────────────────────────────────────
     let findings: ReviewFinding[] = []
     let summary = ""
 
     try {
       const reviewStartedAt = performance.now()
 
-      const reviewResult = await generateText({
+      const reviewResult = await generateObject({
         model: getModel("thorough", ACTIVE_PROVIDER),
-        system: reviewerInstructions(
-          job.language,
-          mappings,
-          Boolean(job.diff)
-        ),
+        system: reviewerInstructions(job.language, mappings, Boolean(job.diff)),
         prompt: sourceMessage,
+        schema: ReviewResultSchema,
         maxOutputTokens: MAX_TOKENS_PER_PASS,
       })
 
-      const parsed = safeParseJson<{
-        findings: ReviewFinding[]
-        summary: string
-      }>(reviewResult.text, { findings: [], summary: "" })
-
-      findings = parsed.findings ?? []
-      summary = parsed.summary ?? ""
+      findings = reviewResult.object.findings as ReviewFinding[]
+      summary = reviewResult.object.summary
 
       logger.info(logger.fmt`Physics review complete for job ${jobId}`, {
         "review.id": jobId,
         "review.findings": findings.length,
-        "review.critical": findings.filter((f) => f.severity === "critical")
-          .length,
+        "review.critical": findings.filter((f) => f.severity === "critical").length,
         "gen_ai.request.model": getModelId("thorough", ACTIVE_PROVIDER),
         duration_ms: elapsed(reviewStartedAt),
       })
@@ -205,13 +227,14 @@ export const physicsReviewTask = schemaTask({
       throw error
     }
 
-    // ─── Persist results ────────────────────────────────────────────────────
+    // ─── Persist results ──────────────────────────────────────────────────────
     await saveReviewResults({
       jobId,
       findings,
       generatedTests,
       summary:
-        summary || `Analysis complete: ${findings.length} findings, ${generatedTests.length} tests generated.`,
+        summary ||
+        `Analysis complete: ${findings.length} findings, ${generatedTests.length} tests generated.`,
     })
 
     logger.info(logger.fmt`Physics review saved for job ${jobId}`, {

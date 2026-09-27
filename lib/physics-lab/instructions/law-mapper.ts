@@ -62,5 +62,7 @@ Rules:
 - Use the exact law IDs from the knowledge base. Do not invent new IDs.
 - If no physics functions are found, return an empty array [].
 
-Return ONLY the JSON array. No explanation, no markdown fences.`
+Return ONLY a JSON object with a "mappings" key containing the array. No explanation, no markdown fences.
+
+Example: {"mappings": [...]}`
 }

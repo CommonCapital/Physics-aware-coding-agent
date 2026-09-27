@@ -23,3 +23,6 @@ export default async function ReviewPage({ params }: Props) {
     </div>
   )
 }
+
+// Auto-revalidate every 5 seconds while the job is running
+export const revalidate = 5
